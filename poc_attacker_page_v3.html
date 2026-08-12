@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="font-family:sans-serif;padding:12px">
+<h3>PoC v3 — MJApi callback test</h3>
+<div id=out style="white-space:pre-wrap;word-break:break-all;font-size:11px;background:#f6f6f6;padding:8px;border:1px solid #ddd;min-height:200px">init...</div>
+<script>
+var out=document.getElementById('out'), log=[];
+function push(l){log.push(l);out.textContent=log.join('\n');}
+
+// === 1) 嵌入米家原生 H5 SDK (smartHomeBridge.js) ===
+// notation: js file can only use this kind of comments
+// since comments will cause error when use in webview.loadurl,
+// comments will be remove by java use regexp
+  console.log('MJApi init begin');
+  if (!window.MJApi || !window.MJApi.callJavaHandler || !window.MJApi.callJavaResponse) {
+    console.log('native must inject MJApi object first');
+    // return; // disabled for PoC
+  }
+
+  if (window.MJApi.isInit) {
+    console.log('MJApi has init');
+    window.MJApi.callHandler('default','init');
+    // return; // disabled for PoC
+  }
+
+  if(window.needWaitHandlerRegister){
+     window.needWaitHandlerRegister=[...window.needWaitHandlerRegister,'onWebVisible'];
+  }else{
+     window.needWaitHandlerRegister=['onWebVisible']
+  }
+  var messageHandlers = {};
+  var responseCallbacks = {};
+  var uniqueId = 1;
+  var waitMessageQueue={};
+
+  // java call js Handler
+  window.MJApi._handleMessageFromNative = function(messageJSON) {
+    console.log(messageJSON);
+    var message = JSON.parse(messageJSON);
+    var responseCallback;
+    // java call finished, now need to call js callback function
+    if (message.responseId) {
+      responseCallback = responseCallbacks[message.responseId];
+      if (!responseCallback) {
+        // return; // disabled for PoC
+      }
+      responseCallback(message.responseData);
+      delete responseCallbacks[message.responseId];
+    } else {
+      // 直接发送
+      if (message.callbackId) {
+        var callbackResponseId = message.callbackId;
+        responseCallback = function(responseData) {
+          window.MJApi.callJavaResponse(responseData, callbackResponseId);
+          delete responseCallbacks[callbackResponseId];
+        };
+        responseCallbacks[callbackResponseId] = responseCallback;
+      }
+
+      var handler = null;
+      if (message.handlerName) {
+          handler = messageHandlers[message.handlerName];
+      }
+      if (!handler) {
+        if(message.handlerName&&window.needWaitHandlerRegister&&window.needWaitHandlerRegister.indexOf(message.handlerName)>=0){
+             waitMessageQueue[message.handlerName]={data:message.data,responseCallback:responseCallback};
+             console.log('MJApi: wait for  handler:'+message.handlerName);
+        }else{
+         if (responseCallback && typeof responseCallback === 'function') {
+                  responseCallback({ status: -1, data: 'no handler' });
+           }
+           console.log('MJApi: no handler');
+        }
+
+      } else {
+        handler(message.data, responseCallback);
+      }
+    }
+  };
+
+    // js call java  handler
+   window.MJApi.callHandler = function(handlerName, data, responseCallback) {
+    var callbackId = '';
+    if (responseCallback) {
+      if (typeof responseCallback === 'string') {
+        callbackId = responseCallback;
+      } else if (typeof responseCallback === 'function') {
+        callbackId = 'cb_' + (uniqueId++) + '_' + new Date().getTime();
+        responseCallbacks[callbackId] = responseCallback;
+      }
+    }
+    window.MJApi.callJavaHandler(handlerName, JSON.stringify(data), callbackId);
+  };
+
+
+  // 注册handler 往数组里面添加值
+  window.MJApi.registerHandler = function(handlerName, handler) {
+    console.log("js registerHandler:"+handlerName);
+    messageHandlers[handlerName] = handler;
+    var waitMessage=waitMessageQueue[handlerName];
+    if(waitMessage){
+         console.log("callhandler while register becuase has wait msg:"+handlerName+":data="+waitMessage.data+",callback="+waitMessage.responseCallback);
+         handler(waitMessage.data,waitMessage.responseCallback);
+         delete waitMessageQueue[handlerName];
+    }
+  };
+  window.MJApi.unRegisterHandler = function(handlerName) {
+  console.log("js unRegisterHandler:"+handlerName);
+    if (messageHandlers[handlerName]) {
+      delete messageHandlers[handlerName];
+    }
+    var waitMessage=waitMessageQueue[handlerName];
+        if(waitMessage){
+             delete waitMessageQueue[handlerName];
+        }
+  };
+
+   window.MJApi.createAPI = function(funcName) {
+      return function(data, callBackFun) {
+        window.MJApi.callHandler(funcName, data, callBackFun);
+      };
+    };
+
+// === 2) SDK 初始化后测试回调 ===
+window.addEventListener('load', function(){
+  push('[UA] '+navigator.userAgent);
+  push('[SDK] MJApi.callHandler='+typeof window.MJApi.callHandler);
+  push('[SDK] MJApi._handleMessageFromNative='+typeof window.MJApi._handleMessageFromNative);
+
+  // 列出 MJApi 上所有 JS 属性
+  try {
+    var keys = [];
+    for (var k in window.MJApi) keys.push(k);
+    push('[MJApi keys] '+keys.join(', '));
+  } catch(e) { push('[keys err] '+e); }
+
+  // 测试已知 handler: 'default'
+  push('\n=== callHandler test ===');
+  try {
+    window.MJApi.callHandler('default', {action:'init'}, function(data){
+      push('[CB default] '+JSON.stringify(data));
+    });
+    push('[call->] default');
+  } catch(e) { push('[err default] '+e); }
+
+  // 测试候选 handler 名（覆盖设备/账号/分享）
+  var names = ['getDeviceList','getDevice','getDeviceInfo','getUserInfo','getAccountInfo',
+               'getMiAccount','mi_account','getRegion','login','memberResponse',
+               'getDeviceOAID','setPrivacyConfirmation','getPrivacy','appInfo',
+               'device_list','getDevices','account_info'];
+  names.forEach(function(n){
+    try {
+      window.MJApi.callHandler(n, {}, function(data){
+        push('[CB '+n+'] '+JSON.stringify(data));
+      });
+      push('[call->] '+n);
+    } catch(e) { push('[err '+n+'] '+e); }
+  });
+
+  // === 3) 同时保留 _native_interface 同步泄漏 ===
+  var ni = window._native_interface;
+  if (ni) {
+    push('\n=== _native_interface ===');
+    ['getSettings','isLogin','getLocale','getNetworkType'].forEach(function(m){
+      try { push('[NI] '+m+'() => '+ni[m]()); } catch(e){}
+    });
+  }
+});
+</script></body></html>

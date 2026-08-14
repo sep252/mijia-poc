@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<style>body{font-family:monospace;padding:10px;font-size:13px}
+#o{white-space:pre-wrap;word-break:break-all;background:#111;color:#0f0;padding:10px;font-size:12px}</style>
+</head>
+<body>
+<h3>youpin final probe: getActSalt + cookie-after-updateToken</h3>
+<pre id="o">running...</pre>
+<script>
+var o=document.getElementById("o"), L=[];
+function p(s){L.push(s);o.innerText=L.join("\n");}
+document.addEventListener("message",function(e){p("[<-] "+e.data);});
+window.addEventListener("message",function(e){p("[<-w] "+e.data);});
+
+p("_MiHomeStore: "+(window._MiHomeStore!==undefined));
+if(window._MiHomeStore) p("  keys: "+Object.keys(window._MiHomeStore).join(","));
+
+function send(name, value){
+  var payload={stackType:"request",name:name,value:typeof value==="string"?value:JSON.stringify(value)};
+  if(window.ReactNativeWebView) ReactNativeWebView.postMessage(JSON.stringify(payload));
+}
+// ① 硬编码盐
+send("getActSalt", "{}");
+// ② 刷新 miotstore token
+send("updateToken", '{"sid":"miotstore"}');
+// ③ 3秒后读 cookie(updateToken 种 cookie 之后)
+setTimeout(function(){
+  p("\n[updateToken 之后] document.cookie = "+(document.cookie||"(空)"));
+  p("[定格]");
+},3000);
+</script>
+</body>
+</html>

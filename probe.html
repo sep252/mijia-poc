@@ -1,0 +1,20 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>WalletProbe</title></head>
+<body style="background:#000;color:#0f0;font:14px monospace;padding:8px;word-break:break-all">
+<div id="out">probing...</div>
+<script>
+var out=document.getElementById('out');var lines=['UA: '+navigator.userAgent,'URL: '+location.href,''];
+var keys=Object.keys(window).filter(function(k){
+  return /bridge|wallet|vivo|jsapi|native|hybrid|webkit|cb|__/i.test(k) && ['location','navigator','document'].indexOf(k)<0;
+});
+lines.push('suspect window keys: '+keys.join(', '));
+try{lines.push('prompt bridge: '+typeof prompt bridge)}catch(e){}
+setTimeout(function(){
+  for(var i=0;i<keys.length;i++){
+    var v;try{v=window[keys[i]]}catch(e){continue}
+    var ms=[];
+    try{ms=Object.getOwnPropertyNames(v).concat(typeof v.__proto__!=='undefined'&&v.__proto__?Object.getOwnPropertyNames(v.__proto__):[])}catch(e){}
+    if(ms.length)lines.push(keys[i]+' -> '+ms.slice(0,25).join(','));
+  }
+  out.textContent=lines.join('\n');
+},2500);
+</script></body></html>

@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>PROBE</title></head>
+<body style="background:#000;color:#0f0;font:16px/1.5 monospace;padding:12px;word-break:break-all">
+<div id="out">PROBE RUNNING...</div>
+<script>
+// 全容错探测：UA / URL / cookie / 桥枚举
+function log(s){document.getElementById('out').textContent += '\n' + s;}
+try{ log('URL=' + location.href); }catch(e){ log('URL err'); }
+try{ log('UA=' + navigator.userAgent.slice(0,120)); }catch(e){}
+try{ log('COOKIE=' + (document.cookie||'(empty)')); }catch(e){ log('COOKIE err'); }
+// 枚举 window 上的注入对象（JS 桥候选）
+try{
+  var builtins = ['location','navigator','document','window','console','Object','Array'];
+  var found = [];
+  for (var k in window) {
+    try {
+      if (builtins.indexOf(k)>=0) continue;
+      var v = window[k];
+      if (v && typeof v === 'object') {
+        var methods = [];
+        for (var m in v) { if (typeof v[m]==='function') methods.push(m); }
+        if (methods.length) found.push(k + ': ' + methods.slice(0,15).join(','));
+      }
+    } catch(e){}
+  }
+  log('BRIDGES=' + (found.length ? found.join(' | ').slice(0,1500) : '(none)'));
+}catch(e){ log('BRIDGE enum err'); }
+try{ log('SCHOOKIT=' + (window.SchoonerKit?Object.keys(window.SchoonerKit).join(','):'none')); }catch(e){}
+</script>
+</body></html>

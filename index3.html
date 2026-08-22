@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>COOKIE-PROBE</title></head>
+<body style="background:#000;color:#0f0;font:22px/1.7 monospace;padding:16px;word-break:break-all">
+<div id=o>COOKIE PROBE...</div>
+<script>
+var el = document.getElementById('o');
+function log(s){ el.textContent += '\n' + s; }
+log('HOST=' + location.host);
+log('COOKIE=' + (document.cookie || '(empty)'));
+log('LEN=' + (document.cookie||'').length);
+// localStorage/sessionStorage（DOM storage 已启用）
+try { log('LS-KEYS=' + Object.keys(localStorage).join(',').slice(0,200)); } catch(e){ log('LS-ERR'); }
+try { log('SS-KEYS=' + Object.keys(sessionStorage).join(',').slice(0,200)); } catch(e){ log('SS-ERR'); }
+log('DONE');
+</script></body></html>
